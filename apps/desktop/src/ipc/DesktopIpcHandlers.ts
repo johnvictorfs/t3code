@@ -26,6 +26,7 @@ import {
   resolveSshHost,
   resolveSshPasswordPrompt,
 } from "./methods/sshEnvironment.ts";
+import { checkForkUpdate, getForkUpdateState, startForkUpdate } from "./methods/forkUpdates.ts";
 import {
   checkForUpdate,
   downloadUpdate,
@@ -162,6 +163,9 @@ export const installDesktopIpcHandlers = Effect.fn("desktop.ipc.installHandlers"
   yield* ipc.handle(downloadUpdate);
   yield* ipc.handle(installUpdate);
   yield* ipc.handle(checkForUpdate);
+  yield* ipc.handle(getForkUpdateState);
+  yield* ipc.handle(checkForkUpdate);
+  yield* ipc.handle(startForkUpdate);
   yield* ipc.handle(getCliCommandState);
   yield* ipc.handle(installCliCommand);
   yield* ipc.handle(uninstallCliCommand);
