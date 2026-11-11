@@ -935,3 +935,82 @@ export function collectProviderUsageLimits(
   }
   return { createdAt: DateTime.formatIso(DateTime.makeUnsafe(now)), accounts, notices };
 }
+
+export interface UsageBudget {
+  readonly totalUsd: number;
+  readonly usedUsd: number;
+  readonly leftUsd: number;
+}
+
+export interface ProviderUsageSummary {
+  readonly instanceId: ProviderInstanceId;
+  readonly label: string;
+  readonly accentColor: string | undefined;
+  /** The window closest to its limit, so the chip says when you are about to be blocked. */
+  readonly window: ServerProviderUsageWindow;
+  readonly budget: UsageBudget | null;
+}
+
+const BUDGET_WINDOW_KIND_RANK: Record<ServerProviderUsageWindow["kind"], number> = {
+  monthly: 0,
+  weekly: 1,
+  session: 2,
+  other: 3,
+};
+
+/** The longest window stands in for the billing period, so a short session does not swing the dollars. */
+function budgetWindow(windows: readonly ServerProviderUsageWindow[]) {
+  return [...windows].sort(
+    (a, b) =>
+      BUDGET_WINDOW_KIND_RANK[a.kind] - BUDGET_WINDOW_KIND_RANK[b.kind] ||
+      b.usedPercent - a.usedPercent,
+  )[0];
+}
+
+function usageBudget(
+  totalUsd: number | undefined,
+  windows: readonly ServerProviderUsageWindow[],
+): UsageBudget | null {
+  const window = budgetWindow(windows);
+  if (totalUsd === undefined || window === undefined) return null;
+  const usedUsd = (totalUsd * window.usedPercent) / 100;
+  return { totalUsd, usedUsd, leftUsd: totalUsd - usedUsd };
+}
+
+export function summarizeProviderUsage(
+  providers: readonly ServerProvider[],
+  budgetsUsd: Readonly<Record<string, number | undefined>>,
+): readonly ProviderUsageSummary[] {
+  return providersWithLimits(providers).flatMap((provider) => {
+    const limits = provider.usageLimits;
+    if (limits === undefined || limitsNotice(limits) !== null) return [];
+    const windows = limits.windows;
+    const [window] = [...windows].sort((a, b) => b.usedPercent - a.usedPercent);
+    if (window === undefined) return [];
+    return [
+      {
+        instanceId: provider.instanceId,
+        label:
+          provider.displayName?.trim() ||
+          PROVIDER_DISPLAY_NAMES[provider.driver] ||
+          provider.driver,
+        accentColor: provider.accentColor,
+        window,
+        budget: usageBudget(budgetsUsd[provider.instanceId], windows),
+      },
+    ];
+  });
+}
+
+export function totalUsageBudget(summaries: readonly ProviderUsageSummary[]) {
+  const budgets = summaries.flatMap((summary) => (summary.budget ? [summary.budget] : []));
+  if (budgets.length === 0) return null;
+  const totalUsd = budgets.reduce((sum, budget) => sum + budget.totalUsd, 0);
+  const usedUsd = budgets.reduce((sum, budget) => sum + budget.usedUsd, 0);
+  return {
+    totalUsd,
+    usedUsd,
+    leftUsd: totalUsd - usedUsd,
+    leftPercent: Math.round(((totalUsd - usedUsd) / totalUsd) * 100),
+  };
+}

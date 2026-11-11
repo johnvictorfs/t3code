@@ -69,6 +69,7 @@ import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { AcpSessionManagementSection } from "./AcpSessionManagementSection";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
+import { UsageBudgetField } from "./UsageBudgetField";
 import { readCodexSetupMode } from "./CodexSetupSection.logic";
 import {
   getProviderVersionAdvisoryPresentation,
@@ -854,6 +855,15 @@ export function ProviderInstanceCard({
     );
   };
 
+  const updateUsageBudget = (budget: number | undefined) => {
+    const { usageBudgetUsd: _omit, ...rest } = instance;
+    onUpdate(
+      budget === undefined
+        ? (rest as ProviderInstanceConfig)
+        : ({ ...rest, usageBudgetUsd: budget } as ProviderInstanceConfig),
+    );
+  };
+
   const updateConfig = (nextConfig: Record<string, unknown> | undefined) => {
     const { config: _omit, ...rest } = instance;
     onUpdate(
@@ -1293,6 +1303,25 @@ export function ProviderInstanceCard({
             </div>
           }
         />
+        {liveProvider?.usageLimits !== undefined || instance.usageBudgetUsd !== undefined ? (
+          <SettingsRow
+            title="Usage budget"
+            description="What this account's usage limit is worth in dollars. The chat usage chip derives dollars used and left from the percent used of the longest limit window (monthly, else weekly)."
+            control={
+              <div
+                inert={readOnly}
+                aria-disabled={readOnly || undefined}
+                className={readOnly ? "opacity-50 select-none" : undefined}
+              >
+                <UsageBudgetField
+                  id={`provider-instance-${instanceId}-usage-budget`}
+                  value={instance.usageBudgetUsd}
+                  onCommit={updateUsageBudget}
+                />
+              </div>
+            }
+          />
+        ) : null}
       </SettingsSection>
 
       {setup || environmentFields.length > 0 ? (
