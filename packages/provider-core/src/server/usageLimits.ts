@@ -47,6 +47,18 @@ export function makeUnavailableUsageLimits(input: {
   };
 }
 
+export function makeSpendUsageLimits(input: {
+  readonly checkedAt: string;
+  readonly usd: number;
+  readonly resetsAt?: string;
+}): ServerProviderUsageLimits {
+  return {
+    checkedAt: input.checkedAt,
+    windows: [],
+    spend: { usd: input.usd, ...(input.resetsAt ? { resetsAt: input.resetsAt } : {}) },
+  };
+}
+
 export function applyUsageLimitsUpdate(input: {
   readonly previous: ServerProviderUsageLimits | undefined;
   readonly update: ProviderUsageLimitsUpdate;
