@@ -10,10 +10,20 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import {
   clampPercent,
+  makeSpendUsageLimits,
   makeUnavailableUsageLimits,
   makeUsageLimits,
 } from "@t3tools/provider-core/server/usageLimits";
 import { DEFAULT_CURSOR_API_ENDPOINT, exchangeCursorApiKey } from "./apiKey.ts";
+
+const CursorSpendResponse = Schema.Struct({ totalCostCents: Schema.Number });
+const CursorPlanInfoResponse = Schema.Struct({
+  planInfo: Schema.optional(
+    Schema.Struct({
+      billingCycleEnd: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
+    }),
+  ),
+});
 
 const CursorUsageResponse = Schema.Struct({
   billingCycleEnd: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
@@ -134,26 +144,51 @@ export const readCursorUsageLimits = Effect.fn("readCursorUsageLimits")(function
     }
     if (!token) return makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" });
     const client = yield* HttpClient.HttpClient;
-    const response = yield* client.execute(
-      HttpClientRequest.post(`${endpoint}/aiserver.v1.DashboardService/GetCurrentPeriodUsage`).pipe(
-        HttpClientRequest.bearerToken(token),
-        HttpClientRequest.setHeaders({
-          "connect-protocol-version": "1",
-          "x-cursor-client-type": "cli",
-        }),
-        HttpClientRequest.bodyJsonUnsafe({}),
-      ),
-    );
+    const dashboardRequest = (rpc: string) =>
+      client.execute(
+        HttpClientRequest.post(`${endpoint}/aiserver.v1.DashboardService/${rpc}`).pipe(
+          HttpClientRequest.bearerToken(token),
+          HttpClientRequest.setHeaders({
+            "connect-protocol-version": "1",
+            "x-cursor-client-type": "cli",
+          }),
+          HttpClientRequest.bodyJsonUnsafe({}),
+        ),
+      );
+    const response = yield* dashboardRequest("GetCurrentPeriodUsage");
     const raw = yield* (yield* HttpClientResponse.filterStatusOk(response)).json;
     const body = yield* decodeCursorUsage(raw);
     const limits = cursorUsageResponseToLimits(body, checkedAt);
-    return limits.windows.length > 0
-      ? limits
-      : makeUnavailableUsageLimits({
-          checkedAt,
-          reason: "unsupported",
-          message: `Cursor reported no usage limit for this account. It returned: ${describeShape(raw)}.`,
-        });
+    if (limits.windows.length > 0) {
+      return limits;
+    }
+    // Team plans hide the allowance from members, but the dashboard still adds up their spend.
+    const spend = yield* dashboardRequest("GetAggregatedUsageEvents").pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap(HttpClientResponse.schemaBodyJson(CursorSpendResponse)),
+      Effect.option,
+    );
+    if (Option.isSome(spend)) {
+      const plan = yield* dashboardRequest("GetPlanInfo").pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(CursorPlanInfoResponse)),
+        Effect.option,
+      );
+      const cycleEnd = Option.getOrUndefined(plan)?.planInfo?.billingCycleEnd;
+      const cycleEndDate = cycleEnd === undefined ? undefined : DateTime.make(Number(cycleEnd));
+      return makeSpendUsageLimits({
+        checkedAt,
+        usd: spend.value.totalCostCents / 100,
+        ...(cycleEndDate && Option.isSome(cycleEndDate)
+          ? { resetsAt: DateTime.formatIso(cycleEndDate.value) }
+          : {}),
+      });
+    }
+    return makeUnavailableUsageLimits({
+      checkedAt,
+      reason: "unsupported",
+      message: `Cursor reported no usage limit for this account. It returned: ${describeShape(raw)}.`,
+    });
   }).pipe(
     Effect.timeout("10 seconds"),
     Effect.orElseSucceed(() =>

@@ -18,6 +18,8 @@ import {
 
 import * as DateTime from "effect/DateTime";
 
+import { formatUsd } from "./usageFormat.ts";
+
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -928,6 +930,20 @@ function usageBudget(
   return { totalUsd, usedUsd, leftUsd: totalUsd - usedUsd };
 }
 
+/** A plan that reports dollars spent and no limit becomes a percent once the user sets a budget. */
+function spendWindow(
+  spend: NonNullable<ServerProviderUsageLimits["spend"]>,
+  totalUsd: number,
+): ServerProviderUsageWindow {
+  return {
+    id: "spend",
+    kind: "monthly",
+    label: "Spend this billing cycle",
+    usedPercent: Math.min(100, (spend.usd / totalUsd) * 100),
+    ...(spend.resetsAt ? { resetsAt: spend.resetsAt } : {}),
+  };
+}
+
 /** Every provider you can use, including those that report no usage, so a missing one is visible. */
 export function summarizeProviderUsage(
   providers: readonly ServerProvider[],
@@ -937,21 +953,42 @@ export function summarizeProviderUsage(
     .filter((provider) => provider.enabled && provider.installed && isProviderAvailable(provider))
     .map((provider) => {
       const limits = provider.usageLimits;
-      const reported = limits !== undefined && limitsNotice(limits) === null;
-      const windows = reported ? limits.windows : [];
-      const [window = null] = [...windows].sort((a, b) => b.usedPercent - a.usedPercent);
-      return {
+      const identity = {
         instanceId: provider.instanceId,
         label:
           provider.displayName?.trim() ||
           PROVIDER_DISPLAY_NAMES[provider.driver] ||
           provider.driver,
         accentColor: provider.accentColor,
+      };
+      const totalUsd = budgetsUsd[provider.instanceId];
+      if (limits?.spend !== undefined) {
+        if (totalUsd === undefined) {
+          return {
+            ...identity,
+            window: null,
+            budget: null,
+            notice: `${formatUsd(limits.spend.usd)} spent this billing cycle. Set a usage budget in the provider settings to see what is left.`,
+          };
+        }
+        const usedUsd = limits.spend.usd;
+        return {
+          ...identity,
+          window: spendWindow(limits.spend, totalUsd),
+          budget: { totalUsd, usedUsd, leftUsd: Math.max(0, totalUsd - usedUsd) },
+          notice: null,
+        };
+      }
+      const reported = limits !== undefined && limitsNotice(limits) === null;
+      const windows = reported ? limits.windows : [];
+      const [window = null] = [...windows].sort((a, b) => b.usedPercent - a.usedPercent);
+      return {
+        ...identity,
         window,
         notice: reported
           ? null
           : ((limits && limitsNotice(limits)) ?? "This provider does not report usage."),
-        budget: usageBudget(budgetsUsd[provider.instanceId], windows),
+        budget: usageBudget(totalUsd, windows),
       };
     });
 }
