@@ -21,6 +21,8 @@ import {
   exhaustedUsageWindow,
   paceOf,
   paceRemainingPercent,
+  summarizeProviderUsage,
+  totalUsageBudget,
   usesChatGptSharing,
   resolveNewThreadModelSelection,
 } from "./usageLimits.ts";
@@ -1554,5 +1556,59 @@ describe("ChatGPT sharing presentation", () => {
         auth: { status: "unauthenticated", subscriptionSharing: true },
       }),
     ).toBe(false);
+  });
+});
+
+describe("provider usage budgets", () => {
+  const checkedAt = "2026-09-03T11:00:00.000Z";
+  const session = { ...window, usedPercent: 90 };
+  const weekly = {
+    ...window,
+    id: "weekly",
+    kind: "weekly",
+    label: "Weekly",
+    usedPercent: 25,
+  } as const;
+  const codex = provider({ usageLimits: { checkedAt, windows: [session, weekly] } });
+  const claude = provider({
+    instanceId: ProviderInstanceId.make("claudeAgent"),
+    driver: ProviderDriverKind.make("claudeAgent"),
+    usageLimits: { checkedAt, windows: [{ ...weekly, usedPercent: 50 }] },
+  });
+
+  it("shows the window closest to its limit but derives dollars from the longest one", () => {
+    const [summary] = summarizeProviderUsage([codex], { codex: 200 });
+    expect(summary?.window.id).toBe("five_hour");
+    expect(summary?.budget).toEqual({ totalUsd: 200, usedUsd: 50, leftUsd: 150 });
+  });
+
+  it("has no dollars without a budget, and skips providers without readable limits", () => {
+    const unavailable = provider({
+      instanceId: ProviderInstanceId.make("cursor"),
+      driver: ProviderDriverKind.make("cursor"),
+      usageLimits: { checkedAt, windows: [], unavailable: { reason: "probeFailed" } },
+    });
+    const summaries = summarizeProviderUsage([codex, unavailable], {});
+    expect(summaries.map((summary) => summary.instanceId)).toEqual(["codex"]);
+    expect(summaries[0]?.budget).toBeNull();
+    expect(totalUsageBudget(summaries)).toBeNull();
+  });
+
+  it("totals only the providers that have a budget", () => {
+    const summaries = summarizeProviderUsage([codex, claude], { codex: 200, claudeAgent: 100 });
+    expect(totalUsageBudget(summaries)).toEqual({
+      totalUsd: 300,
+      usedUsd: 100,
+      leftUsd: 200,
+      leftPercent: 67,
+    });
+    expect(totalUsageBudget(summarizeProviderUsage([codex, claude], { claudeAgent: 100 }))).toEqual(
+      {
+        totalUsd: 100,
+        usedUsd: 50,
+        leftUsd: 50,
+        leftPercent: 50,
+      },
+    );
   });
 });
