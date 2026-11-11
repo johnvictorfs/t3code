@@ -1,4 +1,4 @@
-import type { ProviderInstanceId } from "@t3tools/contracts";
+import type { ProviderInstanceId, ServerProviderUsageWindow } from "@t3tools/contracts";
 import {
   type ProviderUsageSummary,
   remainingPercent,
@@ -11,14 +11,19 @@ import type { ProviderInstanceEntry } from "../../providerInstances";
 import { Badge } from "../ui/badge";
 import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "../ui/popover";
 
-function UsageBar({ summary }: { readonly summary: ProviderUsageSummary }) {
+function UsageBar({
+  window,
+  accentColor,
+}: Pick<ProviderUsageSummary, "accentColor"> & {
+  readonly window: ServerProviderUsageWindow;
+}) {
   return (
     <div className="h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
       <div
         className="h-full rounded-full"
         style={{
-          width: `${remainingPercent(summary.window)}%`,
-          background: summary.accentColor ?? "var(--foreground)",
+          width: `${remainingPercent(window)}%`,
+          background: accentColor ?? "var(--foreground)",
         }}
       />
     </div>
@@ -26,15 +31,19 @@ function UsageBar({ summary }: { readonly summary: ProviderUsageSummary }) {
 }
 
 function ProviderUsageRow({ summary }: { readonly summary: ProviderUsageSummary }) {
-  const { budget } = summary;
+  const { budget, window } = summary;
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-3 text-sm">
         <span className="min-w-0 truncate font-medium">{summary.label}</span>
-        <span className="shrink-0 tabular-nums">{remainingPercent(summary.window)}% left</span>
+        <span className="shrink-0 tabular-nums">
+          {window ? `${remainingPercent(window)}% left` : "No usage data"}
+        </span>
       </div>
-      <UsageBar summary={summary} />
-      <span className="truncate text-muted-foreground text-xs">{summary.window.label}</span>
+      {window ? <UsageBar window={window} accentColor={summary.accentColor} /> : null}
+      <span className="text-muted-foreground text-xs">
+        {window ? window.label : summary.notice}
+      </span>
       {budget ? (
         <div className="text-muted-foreground text-xs tabular-nums">
           {formatUsd(budget.usedUsd)} used of {formatUsd(budget.totalUsd)} ·{" "}
@@ -77,7 +86,7 @@ export function ComposerUsageChip({
           />
         }
       >
-        {remainingPercent(selected.window)}%
+        {selected.window ? `${remainingPercent(selected.window)}%` : "--"}
       </PopoverTrigger>
       <PopoverPopup align="start" side="top" width="sm">
         <div className="flex flex-col gap-3 text-foreground">

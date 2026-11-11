@@ -1578,19 +1578,29 @@ describe("provider usage budgets", () => {
 
   it("shows the window closest to its limit but derives dollars from the longest one", () => {
     const [summary] = summarizeProviderUsage([codex], { codex: 200 });
-    expect(summary?.window.id).toBe("five_hour");
+    expect(summary?.window?.id).toBe("five_hour");
     expect(summary?.budget).toEqual({ totalUsd: 200, usedUsd: 50, leftUsd: 150 });
   });
 
-  it("has no dollars without a budget, and skips providers without readable limits", () => {
+  it("lists providers without readable usage, with the reason and no dollars", () => {
     const unavailable = provider({
       instanceId: ProviderInstanceId.make("cursor"),
       driver: ProviderDriverKind.make("cursor"),
       usageLimits: { checkedAt, windows: [], unavailable: { reason: "probeFailed" } },
     });
-    const summaries = summarizeProviderUsage([codex, unavailable], {});
-    expect(summaries.map((summary) => summary.instanceId)).toEqual(["codex"]);
+    const silent = provider({
+      instanceId: ProviderInstanceId.make("copilot"),
+      driver: ProviderDriverKind.make("copilot"),
+    });
+    const summaries = summarizeProviderUsage([codex, unavailable, silent], { cursor: 100 });
+    expect(summaries.map((summary) => summary.instanceId)).toEqual(["codex", "cursor", "copilot"]);
     expect(summaries[0]?.budget).toBeNull();
+    expect(summaries[1]).toMatchObject({
+      window: null,
+      budget: null,
+      notice: "Could not read limits.",
+    });
+    expect(summaries[2]?.notice).toBe("This provider does not report usage.");
     expect(totalUsageBudget(summaries)).toBeNull();
   });
 

@@ -895,8 +895,10 @@ export interface ProviderUsageSummary {
   readonly instanceId: ProviderInstanceId;
   readonly label: string;
   readonly accentColor: string | undefined;
-  /** The window closest to its limit, so the chip says when you are about to be blocked. */
-  readonly window: ServerProviderUsageWindow;
+  /** The window closest to its limit, so the chip says when you are about to be blocked. Null when the provider reports no usage. */
+  readonly window: ServerProviderUsageWindow | null;
+  /** Why there is no window, for example Cursor failing to read its plan usage. */
+  readonly notice: string | null;
   readonly budget: UsageBudget | null;
 }
 
@@ -926,18 +928,19 @@ function usageBudget(
   return { totalUsd, usedUsd, leftUsd: totalUsd - usedUsd };
 }
 
+/** Every provider you can use, including those that report no usage, so a missing one is visible. */
 export function summarizeProviderUsage(
   providers: readonly ServerProvider[],
   budgetsUsd: Readonly<Record<string, number | undefined>>,
 ): readonly ProviderUsageSummary[] {
-  return providersWithLimits(providers).flatMap((provider) => {
-    const limits = provider.usageLimits;
-    if (limits === undefined || limitsNotice(limits) !== null) return [];
-    const windows = limits.windows;
-    const [window] = [...windows].sort((a, b) => b.usedPercent - a.usedPercent);
-    if (window === undefined) return [];
-    return [
-      {
+  return providers
+    .filter((provider) => provider.enabled && provider.installed && isProviderAvailable(provider))
+    .map((provider) => {
+      const limits = provider.usageLimits;
+      const reported = limits !== undefined && limitsNotice(limits) === null;
+      const windows = reported ? limits.windows : [];
+      const [window = null] = [...windows].sort((a, b) => b.usedPercent - a.usedPercent);
+      return {
         instanceId: provider.instanceId,
         label:
           provider.displayName?.trim() ||
@@ -945,10 +948,12 @@ export function summarizeProviderUsage(
           provider.driver,
         accentColor: provider.accentColor,
         window,
+        notice: reported
+          ? null
+          : ((limits && limitsNotice(limits)) ?? "This provider does not report usage."),
         budget: usageBudget(budgetsUsd[provider.instanceId], windows),
-      },
-    ];
-  });
+      };
+    });
 }
 
 export function totalUsageBudget(summaries: readonly ProviderUsageSummary[]) {

@@ -1302,25 +1302,23 @@ export function ProviderInstanceCard({
             </div>
           }
         />
-        {liveProvider?.usageLimits !== undefined || instance.usageBudgetUsd !== undefined ? (
-          <SettingsRow
-            title="Usage budget"
-            description="What this account's usage limit is worth in dollars. The chat usage chip derives dollars used and left from the percent used of the longest limit window (monthly, else weekly)."
-            control={
-              <div
-                inert={readOnly}
-                aria-disabled={readOnly || undefined}
-                className={readOnly ? "opacity-50 select-none" : undefined}
-              >
-                <UsageBudgetField
-                  id={`provider-instance-${instanceId}-usage-budget`}
-                  value={instance.usageBudgetUsd}
-                  onCommit={updateUsageBudget}
-                />
-              </div>
-            }
-          />
-        ) : null}
+        <SettingsRow
+          title="Usage budget"
+          description="What this account's usage limit is worth in dollars. The usage chip works out dollars used and left from the percent used, so it needs a provider that reports usage."
+          control={
+            <div
+              inert={readOnly}
+              aria-disabled={readOnly || undefined}
+              className={readOnly ? "opacity-50 select-none" : undefined}
+            >
+              <UsageBudgetField
+                id={`provider-instance-${instanceId}-usage-budget`}
+                value={instance.usageBudgetUsd}
+                onCommit={updateUsageBudget}
+              />
+            </div>
+          }
+        />
       </SettingsSection>
 
       {setup || environmentFields.length > 0 ? (
