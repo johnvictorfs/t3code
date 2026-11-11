@@ -58,6 +58,13 @@ export const ServerProviderUsageLimits = Schema.Struct({
       message: Schema.optional(TrimmedNonEmptyString),
     }),
   ),
+  /** For plans that report dollars spent but no limit: the user's own budget turns it into a percent. */
+  spend: Schema.optional(
+    Schema.Struct({
+      usd: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
+      resetsAt: Schema.optional(IsoDateTime),
+    }),
+  ),
 });
 export type ServerProviderUsageLimits = typeof ServerProviderUsageLimits.Type;
 

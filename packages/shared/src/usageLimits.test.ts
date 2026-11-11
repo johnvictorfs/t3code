@@ -1604,6 +1604,25 @@ describe("provider usage budgets", () => {
     expect(totalUsageBudget(summaries)).toBeNull();
   });
 
+  it("turns reported spend into a percent once there is a budget, and says so when there is not", () => {
+    const cursor = provider({
+      instanceId: ProviderInstanceId.make("cursor"),
+      driver: ProviderDriverKind.make("cursor"),
+      usageLimits: { checkedAt, windows: [], spend: { usd: 250 } },
+    });
+    const [budgeted] = summarizeProviderUsage([cursor], { cursor: 1000 });
+    expect(budgeted?.window?.usedPercent).toBe(25);
+    expect(budgeted?.budget).toEqual({ totalUsd: 1000, usedUsd: 250, leftUsd: 750 });
+
+    const [unbudgeted] = summarizeProviderUsage([cursor], {});
+    expect(unbudgeted?.window).toBeNull();
+    expect(unbudgeted?.notice).toContain("$250.00 spent this billing cycle");
+
+    const [over] = summarizeProviderUsage([cursor], { cursor: 100 });
+    expect(over?.window?.usedPercent).toBe(100);
+    expect(over?.budget?.leftUsd).toBe(0);
+  });
+
   it("totals only the providers that have a budget", () => {
     const summaries = summarizeProviderUsage([codex, claude], { codex: 200, claudeAgent: 100 });
     expect(totalUsageBudget(summaries)).toEqual({

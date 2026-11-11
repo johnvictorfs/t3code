@@ -94,6 +94,30 @@ describe("Cursor usage limits", () => {
     }),
   );
 
+  it.effect("reads the dashboard's spend when the plan hides its allowance", () =>
+    Effect.gen(function* () {
+      const limits = yield* readCursorUsageLimits(
+        { apiEndpoint: "" },
+        { CURSOR_AUTH_TOKEN: "token" },
+      ).pipe(
+        Effect.provideService(
+          HttpClient.HttpClient,
+          HttpClient.make((request) => {
+            const body = request.url.endsWith("GetAggregatedUsageEvents")
+              ? { totalCostCents: 13467.97 }
+              : request.url.endsWith("GetPlanInfo")
+                ? { planInfo: { billingCycleEnd: "1796083200000" } }
+                : { billingCycleStart: "1", billingCycleEnd: "1" };
+            return Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(body)));
+          }),
+        ),
+      );
+      expect(limits.windows).toEqual([]);
+      expect(limits.spend?.usd).toBeCloseTo(134.6797);
+      expect(limits.spend?.resetsAt).toBe("2026-12-01T00:00:00.000Z");
+    }),
+  );
+
   it.effect("reports failed requests without exposing credentials or response bodies", () =>
     Effect.gen(function* () {
       const limits = yield* readCursorUsageLimits(
