@@ -25,6 +25,17 @@ export const copilotClientCapabilitiesMeta = {
   },
 };
 
+export function isCopilotSettings(settings: {
+  readonly source: string;
+  readonly agentId: string;
+  readonly commandPath: string;
+}): boolean {
+  if (settings.source === "local") {
+    return /^copilot(\.exe|\.cmd)?$/i.test(settings.commandPath.split(/[\\/]/).pop() ?? "");
+  }
+  return settings.agentId === "github-copilot-cli";
+}
+
 const isAcpRequestError = Schema.is(AcpErrors.AcpRequestError);
 
 /** Copilot keeps failing every prompt with these until its process is replaced. */

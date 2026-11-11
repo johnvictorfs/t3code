@@ -22,9 +22,32 @@ const CursorUsageResponse = Schema.Struct({
       totalPercentUsed: Schema.optional(Schema.Number),
       autoPercentUsed: Schema.optional(Schema.Number),
       apiPercentUsed: Schema.optional(Schema.Number),
+      // Team plans can report spend against a limit instead of percentages, both in cents.
+      totalSpend: Schema.optional(Schema.Number),
+      limit: Schema.optional(Schema.Number),
+    }),
+  ),
+  spendLimitUsage: Schema.optional(
+    Schema.Struct({
+      individualLimit: Schema.optional(Schema.Number),
+      individualUsed: Schema.optional(Schema.Number),
+      pooledLimit: Schema.optional(Schema.Number),
+      pooledUsed: Schema.optional(Schema.Number),
     }),
   ),
 });
+
+const decodeCursorUsage = Schema.decodeUnknownEffect(CursorUsageResponse);
+
+function spendWindow(
+  id: string,
+  label: string,
+  used: number | undefined,
+  limit: number | undefined,
+) {
+  if (used === undefined || limit === undefined || !(limit > 0)) return undefined;
+  return { id, label, usedPercent: clampPercent((used / limit) * 100) };
+}
 
 /** Cursor's dashboard percentages include bonus usage; spend / limit does not. */
 export function cursorUsageResponseToLimits(
@@ -50,9 +73,40 @@ export function cursorUsageResponseToLimits(
       });
     }
   }
+  if (windows.length === 0) {
+    const spend = response.spendLimitUsage;
+    const fallback =
+      spendWindow(
+        "planSpend",
+        "Plan spend",
+        response.planUsage?.totalSpend,
+        response.planUsage?.limit,
+      ) ??
+      spendWindow(
+        "individualLimit",
+        "Your spend limit",
+        spend?.individualUsed,
+        spend?.individualLimit,
+      ) ??
+      spendWindow("pooledLimit", "Team spend limit", spend?.pooledUsed, spend?.pooledLimit);
+    if (fallback) {
+      windows.push({ ...fallback, kind: "monthly", ...(resetsAt ? { resetsAt } : {}) });
+    }
+  }
   return windows.length > 0
     ? makeUsageLimits({ checkedAt, windows })
     : makeUnavailableUsageLimits({ checkedAt, reason: "unsupported" });
+}
+
+/** Field names only, never values, so a plan Cursor reports differently can be told apart. */
+function describeShape(value: unknown): string {
+  if (typeof value !== "object" || value === null) return "nothing";
+  const fields = Object.entries(value).flatMap(([key, child]) =>
+    typeof child === "object" && child !== null && !Array.isArray(child)
+      ? Object.keys(child).map((name) => `${key}.${name}`)
+      : [key],
+  );
+  return fields.length > 0 ? fields.join(", ") : "an empty response";
 }
 
 export const readCursorUsageLimits = Effect.fn("readCursorUsageLimits")(function* (
@@ -90,10 +144,16 @@ export const readCursorUsageLimits = Effect.fn("readCursorUsageLimits")(function
         HttpClientRequest.bodyJsonUnsafe({}),
       ),
     );
-    const body = yield* HttpClientResponse.schemaBodyJson(CursorUsageResponse)(
-      yield* HttpClientResponse.filterStatusOk(response),
-    );
-    return cursorUsageResponseToLimits(body, checkedAt);
+    const raw = yield* (yield* HttpClientResponse.filterStatusOk(response)).json;
+    const body = yield* decodeCursorUsage(raw);
+    const limits = cursorUsageResponseToLimits(body, checkedAt);
+    return limits.windows.length > 0
+      ? limits
+      : makeUnavailableUsageLimits({
+          checkedAt,
+          reason: "unsupported",
+          message: `Cursor reported no usage limit for this account. It returned: ${describeShape(raw)}.`,
+        });
   }).pipe(
     Effect.timeout("10 seconds"),
     Effect.orElseSucceed(() =>

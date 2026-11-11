@@ -54,6 +54,19 @@ describe("Cursor usage limits", () => {
     ).toEqual([{ id: "totalPercentUsed", kind: "monthly", label: "Overall", usedPercent: 100 }]);
   });
 
+  it("falls back to spend against a limit when no percentages come back", () => {
+    expect(
+      cursorUsageResponseToLimits({ planUsage: { totalSpend: 2500, limit: 10000 } }, checkedAt)
+        .windows,
+    ).toEqual([{ id: "planSpend", kind: "monthly", label: "Plan spend", usedPercent: 25 }]);
+    expect(
+      cursorUsageResponseToLimits(
+        { spendLimitUsage: { pooledUsed: 50, pooledLimit: 200, individualUsed: 10 } },
+        checkedAt,
+      ).windows,
+    ).toEqual([{ id: "pooledLimit", kind: "monthly", label: "Team spend limit", usedPercent: 25 }]);
+  });
+
   it.effect("requires explicit credentials and accepts an auth token", () =>
     Effect.gen(function* () {
       for (const token of [undefined, "explicit-token"]) {
