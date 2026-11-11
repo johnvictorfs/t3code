@@ -16,6 +16,7 @@ LOG_FILE="$STATE_DIR/update.log"
 UPSTREAM_REMOTE="${T3_FORK_UPSTREAM_REMOTE:-origin}"
 FORK_REMOTE="${T3_FORK_REMOTE:-fork}"
 APP_NAME="T3 Code (Beta)"
+SIGNING_IDENTITY="T3 Fork Local Signing"
 APP_PATH="/Applications/$APP_NAME.app"
 QUIT_TIMEOUT_SECONDS=120
 
@@ -63,6 +64,39 @@ fail() {
   exit 1
 }
 
+# An ad-hoc signature changes with every build, so macOS treats each rebuild as a new app and asks
+# for keychain access again. A fixed self-signed identity keeps the app's identity the same.
+ensure_signing_identity() {
+  if security find-certificate -c "$SIGNING_IDENTITY" >/dev/null 2>&1; then
+    return 0
+  fi
+  local work
+  work="$(mktemp -d)"
+  cat >"$work/cert.conf" <<CONF
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = $SIGNING_IDENTITY
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+CONF
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -config "$work/cert.conf" \
+    -keyout "$work/key.pem" -out "$work/cert.pem" 2>/dev/null
+  openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" -out "$work/id.p12" \
+    -passout pass:t3fork -legacy 2>/dev/null ||
+    openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" -out "$work/id.p12" -passout pass:t3fork
+  security import "$work/id.p12" -k "$HOME/Library/Keychains/login.keychain-db" -P t3fork -T /usr/bin/codesign
+  rm -rf "$work"
+}
+
+sign_app() {
+  codesign --force --deep --sign "$SIGNING_IDENTITY" --preserve-metadata=entitlements "$1"
+}
+
 install_built_app() {
   local dmg stage mount
   dmg="$(ls -t "$REPO"/release/*.dmg 2>/dev/null | head -1 || true)"
@@ -76,6 +110,9 @@ install_built_app() {
   hdiutil attach -nobrowse -readonly -quiet -mountpoint "$mount" "$dmg"
   ditto "$mount/$APP_NAME.app" "$stage/$APP_NAME.app"
   hdiutil detach -quiet "$mount"
+
+  ensure_signing_identity
+  sign_app "$stage/$APP_NAME.app"
 
   osascript -e "tell application \"$APP_NAME\" to quit" || true
   local waited=0

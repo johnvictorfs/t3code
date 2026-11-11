@@ -11,20 +11,40 @@ import type { ProviderInstanceEntry } from "../../providerInstances";
 import { Badge } from "../ui/badge";
 import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "../ui/popover";
 
-function UsageBar({
-  window,
-  accentColor,
-}: Pick<ProviderUsageSummary, "accentColor"> & {
-  readonly window: ServerProviderUsageWindow;
-}) {
+type UsageLevel = "ok" | "low" | "critical";
+
+const LOW_PERCENT = 50;
+const CRITICAL_PERCENT = 20;
+
+const LEVEL_TEXT_CLASS: Record<UsageLevel, string> = {
+  ok: "text-success-foreground",
+  low: "text-warning-foreground",
+  critical: "text-destructive-foreground",
+};
+
+const LEVEL_BAR_CLASS: Record<UsageLevel, string> = {
+  ok: "bg-success",
+  low: "bg-warning",
+  critical: "bg-destructive",
+};
+
+function usageLevel(window: ServerProviderUsageWindow): UsageLevel {
+  const left = remainingPercent(window);
+  if (left < CRITICAL_PERCENT) {
+    return "critical";
+  }
+  if (left < LOW_PERCENT) {
+    return "low";
+  }
+  return "ok";
+}
+
+function UsageBar({ window }: { readonly window: ServerProviderUsageWindow }) {
   return (
     <div className="h-1 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
       <div
-        className="h-full rounded-full"
-        style={{
-          width: `${remainingPercent(window)}%`,
-          background: accentColor ?? "var(--foreground)",
-        }}
+        className={`h-full rounded-full ${LEVEL_BAR_CLASS[usageLevel(window)]}`}
+        style={{ width: `${remainingPercent(window)}%` }}
       />
     </div>
   );
@@ -36,11 +56,15 @@ function ProviderUsageRow({ summary }: { readonly summary: ProviderUsageSummary 
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline justify-between gap-3 text-sm">
         <span className="min-w-0 truncate font-medium">{summary.label}</span>
-        <span className="shrink-0 tabular-nums">
-          {window ? `${remainingPercent(window)}% left` : "No usage data"}
-        </span>
+        {window ? (
+          <span className={`shrink-0 tabular-nums ${LEVEL_TEXT_CLASS[usageLevel(window)]}`}>
+            {remainingPercent(window)}% left
+          </span>
+        ) : (
+          <span className="shrink-0 text-muted-foreground">No usage data</span>
+        )}
       </div>
-      {window ? <UsageBar window={window} accentColor={summary.accentColor} /> : null}
+      {window ? <UsageBar window={window} /> : null}
       <span className="text-muted-foreground text-xs">
         {window ? window.label : summary.notice}
       </span>
@@ -51,6 +75,25 @@ function ProviderUsageRow({ summary }: { readonly summary: ProviderUsageSummary 
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** `$23.77 left · 9%`, with the percent colored by how little is left. */
+function ChipLabel({ summary }: { readonly summary: ProviderUsageSummary }) {
+  const { budget, window } = summary;
+  if (!window) {
+    return <span className="text-muted-foreground">--</span>;
+  }
+  return (
+    <>
+      {budget ? <span>{formatUsd(budget.leftUsd)} left</span> : null}
+      {budget ? (
+        <span aria-hidden="true" className="text-muted-foreground">
+          ·
+        </span>
+      ) : null}
+      <span className={LEVEL_TEXT_CLASS[usageLevel(window)]}>{remainingPercent(window)}%</span>
+    </>
   );
 }
 
@@ -86,7 +129,7 @@ export function ComposerUsageChip({
           />
         }
       >
-        {selected.window ? `${remainingPercent(selected.window)}%` : "--"}
+        <ChipLabel summary={selected} />
       </PopoverTrigger>
       <PopoverPopup align="start" side="top" width="sm">
         <div className="flex flex-col gap-3 text-foreground">
