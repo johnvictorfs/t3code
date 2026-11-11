@@ -591,9 +591,19 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
             }),
           );
     });
+    // On every snapshot, not just the enriched one: a later readiness check replaces that snapshot and would drop it.
+    const withCopilotUsage = (provider: ServerProvider) =>
+      isCopilotSettings(effectiveConfig) && provider.installed
+        ? readCopilotUsageLimits(readinessInput.environment).pipe(
+            Effect.provideService(HttpClient.HttpClient, httpClient),
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+            Effect.map((usageLimits) => ({ ...provider, usageLimits })),
+          )
+        : Effect.succeed(provider);
     const checkProvider = checkAcpRegistryProviderReadiness(readinessInput).pipe(
       Effect.provideService(AcpRegistrySupport.AcpRegistryCatalog, catalog),
       Effect.flatMap(withLiveRuntimeState),
+      Effect.flatMap(withCopilotUsage),
     );
     const enrichProvider = checkAcpRegistryProviderStatus(
       {
@@ -606,15 +616,6 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       Effect.provideService(SecureRandom.SecureRandom, random),
     );
-    // Read on every publish rather than cached with the probe, since the chip shows it as live.
-    const withCopilotUsage = (provider: ServerProvider) =>
-      isCopilotSettings(effectiveConfig) && provider.installed
-        ? readCopilotUsageLimits(readinessInput.environment).pipe(
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-            Effect.map((usageLimits) => ({ ...provider, usageLimits })),
-          )
-        : Effect.succeed(provider);
     const enrichmentCache = yield* Ref.make<{
       readonly generation: number;
       readonly entry: {
