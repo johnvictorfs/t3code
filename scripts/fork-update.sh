@@ -3,7 +3,7 @@
 # desktop app and swaps it into /Applications. The sidebar pill calls this, and it also runs by hand.
 #
 #   scripts/fork-update.sh check     print the newest upstream release the fork is not based on
-#   scripts/fork-update.sh run       rebase, rebuild and install (add --force to rebuild when current)
+#   scripts/fork-update.sh run       rebase, rebuild and install (--force rebuilds when current, --no-install stops after the build)
 #   scripts/fork-update.sh install   install the DMG already built in release/
 #
 # Progress goes to $STATE_DIR/status.json (read by the app) and the log to $STATE_DIR/update.log.
@@ -116,7 +116,7 @@ run)
   begin_step "Checking upstream releases"
   fetch_releases
   tag="$(pending_release_tag)"
-  if [[ -z "$tag" && "${2:-}" != "--force" ]]; then
+  if [[ -z "$tag" && " $* " != *" --force "* ]]; then
     echo "Already based on the newest release"
     write_status idle ""
     exit 0
@@ -142,13 +142,19 @@ run)
   begin_step "Saving the rebased branch"
   git push --force-with-lease "$FORK_REMOTE" HEAD || echo "Push failed, the build is still installed locally"
 
+  if [[ " $* " == *" --no-install "* ]]; then
+    echo "Built $(ls -t "$REPO"/release/*.dmg | head -1). Run '$0 install' to swap it in."
+    write_status idle ""
+    exit 0
+  fi
+
   begin_step "Restarting into the new version"
   install_built_app
   write_status idle ""
   echo "=== Fork update finished $(date) ==="
   ;;
 *)
-  echo "Usage: $0 check | run [--force] | install" >&2
+  echo "Usage: $0 check | run [--force] [--no-install] | install" >&2
   exit 2
   ;;
 esac
