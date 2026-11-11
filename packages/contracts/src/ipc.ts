@@ -341,6 +341,18 @@ export const DesktopCliCommandStateSchema = Schema.Struct({
 });
 export type DesktopCliCommandState = typeof DesktopCliCommandStateSchema.Type;
 
+/** A personal fork's own update flow: rebase onto the newest upstream release, rebuild, reinstall. */
+export const DesktopForkUpdateStateSchema = Schema.Struct({
+  /** False until the fork's update checkout is registered, which hides the sidebar pill. */
+  configured: Schema.Boolean,
+  /** The newest upstream release the fork is not based on yet, or null when it is current. */
+  pendingVersion: Schema.NullOr(Schema.String),
+  status: Schema.Literals(["idle", "running", "failed"]),
+  /** The running step, or the step that failed. */
+  step: Schema.NullOr(Schema.String),
+});
+export type DesktopForkUpdateState = typeof DesktopForkUpdateStateSchema.Type;
+
 export interface DesktopUpdateActionResult {
   accepted: boolean;
   completed: boolean;
@@ -1140,6 +1152,13 @@ export interface DesktopBridge {
   /** With a version, installs only that downloaded build. */
   installUpdate: (expectedVersion?: string) => Promise<DesktopUpdateActionResult>;
   onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
+  forkUpdate: {
+    getState: () => Promise<DesktopForkUpdateState>;
+    /** Fetches upstream releases first, so it needs the network. */
+    check: () => Promise<DesktopForkUpdateState>;
+    /** Runs detached: the app quits and relaunches itself when the new build is ready. */
+    start: () => Promise<DesktopForkUpdateState>;
+  };
   cliCommand: {
     getState: () => Promise<DesktopCliCommandState>;
     install: () => Promise<DesktopCliCommandState>;
