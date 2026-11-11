@@ -785,6 +785,15 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
     });
     // A local executable's version comes only from probing it, so readiness checks reuse the last report.
     const reportedLocalVersion = yield* Ref.make<string | null>(null);
+    // On every snapshot, not just the enriched one: a later readiness check replaces that snapshot and would drop it.
+    const withCopilotUsage = (provider: ServerProvider) =>
+      isCopilotSettings(effectiveConfig) && provider.installed
+        ? readCopilotUsageLimits(readinessInput.environment).pipe(
+            Effect.provideService(HttpClient.HttpClient, httpClient),
+            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+            Effect.map((usageLimits) => ({ ...provider, usageLimits })),
+          )
+        : Effect.succeed(provider);
     const checkProvider = checkAcpRegistryProviderReadiness(readinessInput).pipe(
       Effect.provideService(AcpRegistrySupport.AcpRegistryCatalog, catalog),
       Effect.flatMap((provider) =>
@@ -797,8 +806,9 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
         ),
       ),
       Effect.flatMap(withLiveRuntimeState),
+      Effect.flatMap(withCopilotUsage),
     );
-    const modelsToDiscover =Effect.fn("AcpRegistryDriver.modelsToDiscover")(function* (
+    const modelsToDiscover = Effect.fn("AcpRegistryDriver.modelsToDiscover")(function* (
       provider: ServerProvider,
     ) {
       yield* learnedModelOptions.setVersion(provider.version);
@@ -868,15 +878,6 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
             .pipe(Effect.andThen(runtimeCoordinator.value.clearAvailableCommands(instanceId)))
         : Effect.void
     ).pipe(Effect.andThen(clearLearnedModels), Effect.andThen(Ref.set(lastAcceptedCatalog, null)));
-    // Read on every publish rather than cached with the probe, since the chip shows it as live.
-    const withCopilotUsage = (provider: ServerProvider) =>
-      isCopilotSettings(effectiveConfig) && provider.installed
-        ? readCopilotUsageLimits(readinessInput.environment).pipe(
-            Effect.provideService(HttpClient.HttpClient, httpClient),
-            Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-            Effect.map((usageLimits) => ({ ...provider, usageLimits })),
-          )
-        : Effect.succeed(provider);
     const enrichmentCache = yield* Ref.make<AcpRegistryEnrichmentCache>({
       generation: 0,
       entry: null,
