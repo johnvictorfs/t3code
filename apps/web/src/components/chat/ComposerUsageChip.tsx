@@ -17,9 +17,9 @@ const LOW_PERCENT = 50;
 const CRITICAL_PERCENT = 20;
 
 const LEVEL_TEXT_CLASS: Record<UsageLevel, string> = {
-  ok: "text-success-foreground",
-  low: "text-warning-foreground",
-  critical: "text-destructive-foreground",
+  ok: "text-success",
+  low: "text-warning",
+  critical: "text-destructive",
 };
 
 const LEVEL_BAR_CLASS: Record<UsageLevel, string> = {
