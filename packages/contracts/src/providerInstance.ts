@@ -76,6 +76,8 @@ export const ProviderInstanceConfig = Schema.Struct({
   driver: ProviderDriverKind,
   displayName: Schema.optional(TrimmedNonEmptyString),
   accentColor: Schema.optional(TrimmedNonEmptyString),
+  /** What the account's usage limit is worth in dollars. Used and left amounts derive from the reported percent. */
+  usageBudgetUsd: Schema.optional(Schema.Number.check(Schema.isGreaterThan(0))),
   environment: Schema.optionalKey(ProviderInstanceEnvironment),
   enabled: Schema.optionalKey(Schema.Boolean),
   config: Schema.optionalKey(Schema.Unknown),

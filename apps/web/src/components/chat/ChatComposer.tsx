@@ -1059,6 +1059,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     selectedModelOptionsForDispatch,
   );
   const selectedModelForPicker = selectedModel;
+  const usageBudgetsUsd = Object.fromEntries(
+    Object.entries(settings.providerInstances).map(([instanceId, instance]) => [
+      instanceId,
+      instance.usageBudgetUsd,
+    ]),
+  );
   const modelOptionsByInstance = new Map<ProviderInstanceId, ReadonlyArray<AppModelOption>>();
   for (const entry of providerInstanceEntries) {
     modelOptionsByInstance.set(
@@ -2730,6 +2736,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       lockedProvider={lockedProvider}
       lockedContinuationGroupKey={lockedContinuationGroupKey}
       providerInstanceEntries={providerInstanceEntries}
+      usageBudgetsUsd={usageBudgetsUsd}
       keybindings={keybindings}
       modelOptionsByInstance={modelOptionsByInstance}
       terminalOpen={terminalOpen}

@@ -6,6 +6,7 @@ import { useGT, useMessages } from "gt-react";
 import { CircleAlertIcon } from "lucide-react";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerControl } from "./ComposerControl";
+import { ComposerUsageChip } from "./ComposerUsageChip";
 import {
   ComposerFooterModeControls,
   ComposerModelPicker,
@@ -80,6 +81,7 @@ export function ComposerControlsBar(props: {
   lockedProvider: ChatComposerProps["lockedProvider"];
   lockedContinuationGroupKey: string | null;
   providerInstanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+  usageBudgetsUsd: Readonly<Record<string, number | undefined>>;
   keybindings: ChatComposerProps["keybindings"];
   modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<AppModelOption>>;
   terminalOpen: boolean;
@@ -124,6 +126,7 @@ export function ComposerControlsBar(props: {
     lockedProvider,
     lockedContinuationGroupKey,
     providerInstanceEntries,
+    usageBudgetsUsd,
     keybindings,
     modelOptionsByInstance,
     terminalOpen,
@@ -265,6 +268,11 @@ export function ComposerControlsBar(props: {
     </ComposerControl>
   ) : (
     <>
+      <ComposerUsageChip
+        entries={providerInstanceEntries}
+        selectedInstanceId={selectedInstanceId}
+        budgetsUsd={usageBudgetsUsd}
+      />
       {composerModelPicker}
 
       <>
