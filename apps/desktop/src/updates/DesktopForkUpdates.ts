@@ -77,11 +77,12 @@ export const make = Effect.gen(function* () {
   });
 
   const state = Effect.gen(function* () {
-    if ((yield* readRepo) === null) {
-      return { configured: false, pendingVersion: null, status: "idle", step: null } as const;
+    const repo = yield* readRepo;
+    if (repo === null) {
+      return { repo: null, pendingVersion: null, status: "idle", step: null } as const;
     }
     return {
-      configured: true,
+      repo,
       pendingVersion: yield* Ref.get(pendingVersion),
       ...(yield* readScriptStatus),
     } as const;

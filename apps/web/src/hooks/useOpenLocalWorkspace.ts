@@ -37,7 +37,10 @@ export function useOpenLocalWorkspace() {
     primaryEnvironment.serverConfig !== null &&
     shellHasSnapshot;
 
-  const open = (request: DesktopAppActivationRequest) =>
+  const open = (
+    request: DesktopAppActivationRequest,
+    threadOptions?: Parameters<typeof openThread>[1],
+  ) =>
     handleDesktopAppActivationRequest(request, {
       getTarget: () => {
         if (
@@ -90,7 +93,7 @@ export function useOpenLocalWorkspace() {
             input: { projectId: projectRef.projectId, archived: false },
           }).then((result) => reportProjectFailure("Failed to unarchive project", result));
         }
-        return openThread(projectRef);
+        return openThread(projectRef, threadOptions);
       },
     });
 

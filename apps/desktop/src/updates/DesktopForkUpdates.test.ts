@@ -57,7 +57,7 @@ it.layer(NodeServices.layer)("DesktopForkUpdates", (it) => {
       const forkUpdates = yield* forkUpdatesIn(yield* fs.makeTempDirectoryScoped());
 
       expect(yield* forkUpdates.state).toEqual({
-        configured: false,
+        repo: null,
         pendingVersion: null,
         status: "idle",
         step: null,
@@ -97,6 +97,7 @@ it.layer(NodeServices.layer)("DesktopForkUpdates", (it) => {
         JSON.stringify({ phase: "running", step: "Building the app", pid: process.pid }),
       );
       expect(yield* forkUpdates.state).toMatchObject({
+        repo: "/work/t3code-fork",
         status: "running",
         step: "Building the app",
       });
