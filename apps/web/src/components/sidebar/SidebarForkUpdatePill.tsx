@@ -9,7 +9,8 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 const RUNNING_POLL_MS = 2_000;
-const IDLE_CHECK_MS = 6 * 60 * 60 * 1_000;
+const IDLE_CHECK_MS = 60 * 60 * 1_000;
+const FOCUS_CHECK_MIN_GAP_MS = 30 * 60 * 1_000;
 const UPDATE_LOG_PATH = "~/.t3/fork-update/update.log";
 
 function describeForkUpdate(state: DesktopForkUpdateState) {
@@ -51,18 +52,26 @@ export function SidebarForkUpdatePill() {
     const bridge = window.desktopBridge?.forkUpdate;
     if (!bridge) return;
     let cancelled = false;
+    let lastRefreshAt = 0;
     const refresh = () => {
+      lastRefreshAt = Date.now();
       (isRunning ? bridge.getState() : bridge.check())
         .then((next) => {
           if (!cancelled) setState(next);
         })
         .catch(() => undefined);
     };
+    // Timers stop while the Mac sleeps, so an app left open for days would rarely reach the interval.
+    const refreshOnFocus = () => {
+      if (Date.now() - lastRefreshAt >= FOCUS_CHECK_MIN_GAP_MS) refresh();
+    };
     refresh();
     const timer = setInterval(refresh, isRunning ? RUNNING_POLL_MS : IDLE_CHECK_MS);
+    window.addEventListener("focus", refreshOnFocus);
     return () => {
       cancelled = true;
       clearInterval(timer);
+      window.removeEventListener("focus", refreshOnFocus);
     };
   }, [isRunning]);
 
