@@ -360,8 +360,8 @@ export type DesktopCliCommandState = typeof DesktopCliCommandStateSchema.Type;
 
 /** A personal fork's own update flow: rebase onto the newest upstream release, rebuild, reinstall. */
 export const DesktopForkUpdateStateSchema = Schema.Struct({
-  /** False until the fork's update checkout is registered, which hides the sidebar pill. */
-  configured: Schema.Boolean,
+  /** The fork checkout the update runs in, or null until one is registered, which hides the sidebar pill. */
+  repo: Schema.NullOr(Schema.String),
   /** The newest upstream release the fork is not based on yet, or null when it is current. */
   pendingVersion: Schema.NullOr(Schema.String),
   status: Schema.Literals(["idle", "running", "failed"]),
